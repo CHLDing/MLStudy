@@ -1,0 +1,182 @@
+#库准备
+import numpy as np
+import pandas as pd
+import csv
+import math
+import random
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_absolute_error,mean_squared_error
+import matplotlib.pyplot as plt
+########数据处理#######
+#导入数据集
+data = pd.read_csv("E:/SY/arima153out.csv")
+data = np.mat(data)
+
+mm = MinMaxScaler(feature_range=(0, 1))  # 按列做minmax缩放，数据归一化结构方式
+nn = MinMaxScaler(feature_range=(0, 1))
+
+#输入数据和输出数据分开   #先用前六行的数据进行验证
+inputdata = data[0:5]#输入数据
+outputdata = data[5:6]#输出数据
+#数据集归一化
+#对训练数据处理
+
+train_x=mm.fit_transform(inputdata.T)
+print("train_x",train_x.shape)
+train_y=nn.fit_transform(outputdata.T)
+print("train_y",train_y.shape)
+train_x=train_x.T   #对原训练集进行转置
+train_y=train_y.T
+print("转置后有:")
+print("train_x",train_x.shape)
+print("train_y",train_y.shape)
+#训练与测试数据分开
+train_input=train_x[:,0:295]
+print('train_input',train_input.shape)
+train_output=train_y[:,0:295]
+print('train_output',train_output.shape)
+test_input=train_x[:,295:345]
+print("test_input",test_input.shape)
+test_output=train_y[:,295:345]
+print("test_output",test_output.shape)
+# 数据归一化
+
+##########网络结构初始化###########
+innum = 5
+
+midnum = 8
+
+outnum = 1
+############权值阈值初始化#########
+w1 = np.mat(np.random.rand(midnum,innum))
+print("w1",w1.shape)
+b1 = np.mat(np.random.rand(midnum,1))
+print("b1",b1.shape)
+w2 = np.mat(np.random.rand(midnum,outnum))
+b2 = np.mat(np.random.rand(outnum,1))
+
+w2_1 = w2
+w2_2 = w2_1
+w1_1 = w1
+w1_2 = w1_1
+b1_1 = b1
+b1_2 = b1_1
+b2_1 = b2
+b2_2 = b2_1
+
+###############其他初始化##########
+
+xite = 0.1
+alfa = 0.01
+loopNumber = 150
+
+I = np.mat(np.zeros((1,midnum)))
+print("I",I.shape)
+
+Iout = np.mat(np.zeros((1,midnum)))
+print("Iout",Iout.shape)
+
+FI = np.mat(np.zeros((1,midnum)))
+print('FI',FI.shape)
+
+dw1 = np.mat(np.zeros((innum,midnum)))
+print('dw1',dw1.shape)
+print('dw1 type:',type(dw1))
+db1 = np.mat(np.zeros((1,midnum)))
+print('db1',db1)
+
+############神经网络训练##########
+for ii in range(0,loopNumber):
+    if ii%100==0:
+        print("训练至：",ii)
+    for i in range(295):
+        #网络预测输出
+        x = train_input[:,i]#5
+        #隐含层输出
+        for j in range(0,midnum):
+            I[:,j] = train_input[:,i].T*w1[j,:].T + b1[j,:]
+            Iout[:,j] = 1 / ( 1 + math.exp(-I[:,j]))
+        #输出层输出
+        yn = w2.T * Iout.T + b2
+
+##################权值阈值修正##############
+        ###计算误差
+        e = train_output[:,i] - yn
+        print(e)
+        dw2 = e * Iout
+        db2 = e.T
+
+        for j in range(0,midnum):#0,5
+            S = 1 / ( 1 + math.exp(-I[:,j]))
+            FI[:,j] = S * ( 1 - S )
+
+        x=x.reshape(1,5)
+        for k in range(innum):#5
+            for j in range(midnum):#7
+                dw1[k,j]=FI[:,j]*x[:,k]*(e*w2[j,:])
+                db1[:,j]=FI[:,j]*(e*w2[j,:])
+
+        w1 = w1_1 + xite * dw1.T
+        b1 = b1_1 + xite * db1.T
+        w2 = w2_1 + xite * dw2.T
+        b2 = b2_1 + xite * db2.T
+
+        w1_2 = w1_1
+        w1_1 = w1
+        w2_2 = w2_1
+        w2_1 = w2
+        b1_2 = b1_1
+        b1_1 = b1
+        b2_2 = b2_1
+        b2_1 = b2
+#######################(测试)#################
+print("w1训练后的值")
+print(w1)
+print("b1训练后的值")
+print(b1)
+fore = np.mat(np.zeros((1,50)))
+for ii in range(0,1):
+    for i in range(0,50):
+        for j in range(0,midnum):
+            I[:,j] = test_input[:,i].T * w1[j,:].T+ b1[j,:]
+            Iout[:,j] = 1 / (1 + math.exp(-I[:,j]))
+        fore[:,i] = w2.T * Iout.T + b2
+#################结果分析#######################
+'''#fore反归一化,结果为Y'''
+# 反归一化
+predict_value = nn.inverse_transform(fore.reshape(-1,1))
+print("predict_value")
+print(predict_value.shape)
+print("test_output")
+print(test_output.shape)
+predict_value=predict_value.reshape(1,-1)
+error = abs(predict_value - test_output)
+print('error')
+print(error.shape)
+#评价指标
+test_output=nn.inverse_transform(test_output.reshape(-1,1))
+test_output=test_output.reshape(1,-1)
+print("predict_value")
+print(predict_value.shape)
+print("test_output")
+print(test_output.shape)
+
+#画图
+# print(test_output)
+# print(predict_value)
+test_output = test_output.tolist()
+predict_value = predict_value.tolist()
+print(predict_value[0])
+plt.figure()
+plt.plot(test_output[0],  color='r')
+plt.plot(predict_value[0], color='b')
+plt.title('bp')
+plt.show()
+
+# 评价指标 指标
+rmse=np.sqrt(mean_squared_error(predict_value,test_output))
+print("rmse")
+print(rmse)
+mae = mean_absolute_error(y_pred=predict_value, y_true=test_output)
+print("mae")
+print(mae)
